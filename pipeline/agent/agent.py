@@ -57,19 +57,19 @@ class Agent:
       if answer_max_tokens or self.answer_max_tokens:
           max_tokens = self.answer_max_tokens if self.answer_max_tokens else 0
           max_tokens = answer_max_tokens if answer_max_tokens else max_tokens
-          resp = self.ai.ChatCompletion.create(
+          resp = self.ai.chat.completions.create(
             model=self.ai_model,
             messages=messages,
             max_tokens=max_tokens
           )
 
       else:
-        resp = self.ai.ChatCompletion.create(
+        resp = self.ai.chat.completions.create(
           model=self.ai_model,
           messages=messages
         )
       logger.info(f"Agent:{self.name}: talk-response: {str(resp)}")
-      return resp["choices"][0]["message"]["content"]
+      return resp.choices[0].message.content
     
     elif self.ai_provider=="llama2":
       resp = self.ai.query(system_prompt=self.system_prompt, agent_prompt=agent_prompt, history=history)

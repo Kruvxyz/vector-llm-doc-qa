@@ -22,6 +22,10 @@ class Shared:
         self.responses: Dict[str, Optional[str]] = {}
         self.num_digits = num_digits
 
+    def restart(self) -> None:
+        self.query_queue: List[Dict[str, str]] = []
+        self.responses: Dict[str, Optional[str]] = {}
+
     def get_id(self, schedule_sec: int = 60*60*24) -> str:
         while True:
             new_id = ''.join(random.choices(

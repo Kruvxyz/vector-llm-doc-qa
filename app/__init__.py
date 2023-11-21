@@ -7,7 +7,7 @@ from pipeline.config.config import config
 from app.load_documents import load_docs
 from dotenv import load_dotenv
 import os
-import openai
+from openai import OpenAI
 
 load_dotenv()
 config.ai["provider"] = os.getenv("LLM_PROVIDER")
@@ -16,8 +16,8 @@ config.model = os.getenv("OPENAI_MODEL", "gpt-4")
 config.ai["model"] = config.model
 
 if config.ai["provider"] == 'openai':
-    openai.api_key = config.open_ai_key
-    config.ai["ai"] = openai
+    client = OpenAI(api_key=config.open_ai_key)
+    config.ai["ai"] = client
 
 
 app = Flask(__name__)
@@ -27,7 +27,7 @@ cors = CORS(app)
 pipeline = threading.Thread(target=load_docs)
 pipeline.start()
 
-from app.background_process import be_run
+from app.background_process import be_run, run_query
 be = threading.Thread(target=be_run)
 be.start()
 
@@ -45,16 +45,29 @@ def state():
     return jsonify({"status": "ok", "state": str(status.get_state())})
 
 
+@app.route('/restart', methods=['POST'])
+@cross_origin()
+@api_code_validation
+def restart():
+    shared.restart()
+    return jsonify({"status": "ok"})
+
+
 @app.route('/query', methods=['POST'])
 @cross_origin()
 @api_code_validation
 def query():
+
+
     if status.get_state() == config.STATE_LOADING:
         return jsonify({"status": "fail"})
 
     data = request.get_json()
     question = data.get("question")
     id = shared.add_query(question=question)
+    be = threading.Thread(target=run_query, args=[question, id])
+    be.start()
+    
     return jsonify({"status": "ok", "id": id})
 
 
