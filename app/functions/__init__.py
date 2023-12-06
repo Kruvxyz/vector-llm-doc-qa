@@ -3,7 +3,7 @@ from flask import request, jsonify
 from dotenv import load_dotenv
 import os
 from pipeline.shared_content import logger
-
+from app.functions import db
 
 load_dotenv()
 API_CODE = os.getenv("API_CODE", "")

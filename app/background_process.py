@@ -1,117 +1,66 @@
-from pipeline.shared_content import logger, shared, status
+from pipeline.shared_content import logger
 from pipeline.config.config import config
 from pipeline.functions.VectorDB import vectordb
 from pipeline.agent.instantiations.agent_enhance import enhance_question
-from pipeline.agent.instantiations.agent_answer_question import answer_agent
+from pipeline.agent.instantiations.agent_answer_question import gen_agent
 from pipeline.functions.ParseToJson import loadString
 from pipeline.flows.answer_from_text import AnswerPdf
+from pipeline.flows.answer_from_text import AnswerText
+from app.functions.db import create_connection, create_answer, update_query, get_answer_text
+import threading
+from db import db_path
 
-import time
-
-
-def be_run():
-    while True:
-        query_obj = shared.get_query()
-        if not query_obj:
-            time.sleep(10)
-            continue
-
-        id = query_obj["id"]
-        logger.info(f"resolving query id: {id}")
-        status.set_state(config.STATE_RUN)
-
-        question = query_obj.get("question", "")
-
-
-        # if enhance:
-        enhance_done = False
-        try_count = 0
-        while not enhance_done:
-            try:
-                if try_count > 10:
-                    # fail to run
-                    logger.error(f"fail to run, disqualify question: {question}")
-
-                if try_count > 0:
-                    time.sleep(30)
-                try_count += 1
-
-                additional_questions_raw = enhance_question.talk(question)
-                additional_questions = loadString(additional_questions_raw)
-                questions = question + " ".join(additional_questions.get("questions", []))
-                
-                enhance_done = True
-
-            except Exception as e:
-                logger.warning(f"fail to run question: {question} with error: {e}")
-                shared.update_response((id, "failed"))
-
-
-        answer = []
-        results = vectordb.similarity_search_with_score(questions, k=10)
-        for res in results:
-            answer.append({'document': res[0].metadata['document'],
-                       'page': res[0].metadata['page'], 'score': res[1], 'answer': None, 'valid': None})
-
-        shared.update_response((id, answer))
-
-        # if summary:
-
-        answer_questions_flow = AnswerPdf(config, agents={"init": answer_agent}, id=id)
-        answer_questions_flow.run(question)
-        # answer_question_thread = threading.Thread(target=answer_questions_flow.run, args=(question,))
-        # answer_question_thread.start()
-
-        logger.info(f"done resolving query id {id}")
-        status.set_state(config.STATE_READY)
+# db_file = '../db/mysql/database.db'
+db_file = db_path  # f'{db_path}/mysql/database.db'
 
 
 def run_query(question, id):
-    # id = query_obj["id"]
-    # logger.info(f"resolving query id: {id}")
-    # status.set_state(config.STATE_RUN)
+    conn = create_connection(db_file)
 
-    # question = query_obj.get("question", "")
+    # ENHANCE
+    logger.log("run_query: ENHANCE")
+    try:
+        additional_questions_raw = enhance_question.talk(question)
+        print(additional_questions_raw)
+        additional_questions = loadString(additional_questions_raw, format={
+            "questions": "[list of questions]"})
+        questions = question + \
+            " ".join(additional_questions.get("questions", []))
 
+    except Exception as e:
+        logger.warning(f"fail to run question: {question} with error: {e}")
+        questions = question
 
-    # if enhance:
-    enhance_done = False
-    try_count = 0
-    while not enhance_done:
-        try:
-            if try_count > 10:
-                # fail to run
-                logger.error(f"fail to run, disqualify question: {question}")
+    update_query(conn, id, search_query=questions)
 
-            if try_count > 0:
-                time.sleep(30)
-            try_count += 1
-
-            additional_questions_raw = enhance_question.talk(question)
-            additional_questions = loadString(additional_questions_raw, format={"questions": "[list of questions]"})
-            questions = question + " ".join(additional_questions.get("questions", []))
-            
-            enhance_done = True
-
-        except Exception as e:
-            logger.warning(f"fail to run question: {question} with error: {e}")
-            shared.update_response((id, "failed"))
-            questions = question
-            break
-
-
-    answer = []
-    results = vectordb.similarity_search_with_score(questions, k=10)
+    # VECTOR SEARCH
+    logger.log("run_query: VECTOR SEARCH")
+    answers = []
+    results = vectordb.similarity_search_with_score(question, k=10)
     for res in results:
-        answer.append({'document': res[0].metadata['document'],
-                    'page': res[0].metadata['page'], 'score': res[1], 'answer': None, 'valid': None})
+        answer_id = create_answer(
+            conn=conn,
+            query_id=id,
+            score=res[1],
+            document=res[0].metadata['document'],
+            page=res[0].metadata['page'],
+            text=res[0].page_content
+        )
+        answers.append(answer_id)
 
-    shared.update_response((id, answer))
+    update_query(conn, id, status='Summarizing')
 
-    # if summary:
+    # CREATE THREADS FOR ANSWERS
+    logger.log("run_query: CREATE THREADS FOR ANSWERS")
+    for answer_id in answers:
+        text = get_answer_text(conn, answer_id=answer_id)
+        content = {"question": question, "text": text}
+        answer_questions_flow = AnswerText(
+            config, agents={"init": gen_agent()}, id=answer_id)
+        agent = threading.Thread(
+            target=answer_questions_flow.run, args=[content])
+        agent.start()
 
-    answer_questions_flow = AnswerPdf(config, agents={"init": answer_agent}, id=id)
-    answer_questions_flow.run(question)
+    update_query(conn, id, status='Summarizing +')
 
-    logger.info(f"done resolving query id {id}")
-    # status.set_state(config.STATE_READY)
+    logger.log("run_query: DONE")

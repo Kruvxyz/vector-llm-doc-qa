@@ -36,11 +36,11 @@ class AbstractFlow:
   #   """
   #   return 0
   
-  def run(self, content: str = "", prints: bool = True) -> Optional[str]:
+  def run(self, content: Any = "", prints: bool = True) -> Optional[str]:
     """Execute FSM
 
     Args:
-      content (str): flow initial text
+      content (Any): string or dict contains flow initial data
       prints (bool): print agent process
 
     Returns:
@@ -94,11 +94,11 @@ class AbstractFlow:
 
     return None
 
-  def pre_execute_loop(self, content: str) -> None:
+  def pre_execute_loop(self, content: Any) -> None:
     """Update self params befor executing loop
 
     Args:
-      content (str): flow initial text
+      content (Any): flow initial data
 
     Returns:
         None
@@ -143,8 +143,8 @@ class AbstractFlow:
     if command == self.config.COMMAND_END_FLOW:
       self.state = self.config.STATE_CONTINUE
 
-  def append_to_file(self, text: str) -> None:
-    file_path = path.join("outputs/", self.config.output_file_name)
-    f = open(file_path, "a")
-    f.write(text + "\n")
-    f.close()
+  # def append_to_file(self, text: str) -> None:
+  #   file_path = path.join("outputs/", self.config.output_file_name)
+  #   f = open(file_path, "a")
+  #   f.write(text + "\n")
+  #   f.close()

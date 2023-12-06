@@ -31,4 +31,9 @@ format = { "thoughts": { "reasoning": "reasoning", "criticism": "constructive se
 answer_agent = Agent("answer_agent",
                      ai=config.ai, system_prompt=system_message, commands=[], format=format, prompt_generator=gen_prompt)
 
+def gen_agent():
+    return Agent("answer_agent",
+                     ai=config.ai, system_prompt=system_message, commands=[], format=format, prompt_generator=gen_prompt)
+
+
 
